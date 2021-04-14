@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:s3="http://www.mulesoft.org/schema/mule/s3" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="2904b61d-2484-449d-a18a-62c95a23e182" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<kafka:producer-config name="Apache_Kafka_Producer_configuration" doc:name="Apache Kafka Producer configuration" doc:id="f4972a5a-5fba-4738-b97c-f0140b868992" >
+		<kafka:producer-plaintext-connection >
+			<kafka:bootstrap-servers >
+				<kafka:bootstrap-server value="localhost:9092" />
+			</kafka:bootstrap-servers>
+		</kafka:producer-plaintext-connection>
+	</kafka:producer-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="ffbb1ada-6f52-417d-a3eb-3e572daac643" >
+		<http:request-connection protocol="HTTPS" host="Google.com" port="80" />
+	</http:request-config>
+	<s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration" doc:id="9fb4622d-2751-4b85-ba2c-a50e36f5d9ca" >
+		<s3:basic-connection sessionToken="rrererere" accessKey="scscscscse3rr545454545" secretKey="rereeee5454454" />
+	</s3:config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="e3c81da0-25de-44fb-9a62-3741bf2c8c81" >
+		<db:my-sql-connection host="127.0.0.1" port="3306" user="root" password="root" database="pets" />
+	</db:config>
+	<flow name="corelationFlow" doc:id="e0ef1870-dc43-487a-9586-29c36c9d3eae" >
+		<http:listener doc:name="Listener" doc:id="01db08f2-3fb1-41b3-960b-cfc1ff425e91" config-ref="HTTP_Listener_config" path="/corelation" allowedMethods="GET,POST"/>
+		<set-variable value="#[attributes.queryParams.accno]" doc:name="Set Variable" doc:id="f25e7811-316b-4e16-acf4-90c95f00302e" variableName="accno"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="d3128033-c60d-4839-ba43-b27cd91c5084" variableName="varPayload"/>
+		<async doc:name="Async" doc:id="c41f068f-cee3-4b10-8b72-865a7862f3b1">
+			<file:write doc:name="Write" doc:id="899e0956-1ea0-4c4c-be82-03d52f692f50" path="/tmp/hello.txt">
+			<file:content><![CDATA[#[vars.varPayload]]]></file:content>
+		</file:write>
+			<db:insert doc:name="Insert" doc:id="9672eba9-e86b-4254-acf9-6a7a32597f34" config-ref="Database_Config">
+			<db:sql><![CDATA[INSERT INTO audit(accno, corelationid, errortext)
+VALUES (:accno, :corelationid, :errortext)]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+        accno: vars.accno,
+        corelationid:correlationId,
+        errortext: ' file successful '}]]]></db:input-parameters>
+		</db:insert>
+			<logger level="INFO" doc:name="Logger" doc:id="6ae8f8c5-568c-4552-bd51-c47143fe22d1" message="#[vars.accno ++ ' ' ++ correlationId ++ ' file successful ']" />
+			<kafka:publish doc:name="Publish" doc:id="c77b4f87-c76f-454f-b8b1-c4a4e745369d" config-ref="Apache_Kafka_Producer_configuration">
+			<kafka:message><![CDATA[#[vars.varPayload]]]></kafka:message>
+		</kafka:publish>
+			<db:insert doc:name="Insert" doc:id="8e02f2b3-e4d3-405d-93ab-55cbc50c7852" config-ref="Database_Config">
+			<db:sql><![CDATA[INSERT INTO audit(accno, corelationid, errortext)
+VALUES (:accno, :corelationid, :errortext)]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+        accno: vars.accno,
+        corelationid:correlationId,
+        errortext: ' Kafka successful '}]]]></db:input-parameters>
+		</db:insert>
+			<logger level="INFO" doc:name="Logger" doc:id="98f326e8-2662-4c58-a6fa-d473e739ed8b" message="#[vars.accno ++ ' ' ++ correlationId ++  ' kafka successful ']" />
+			<try doc:name="Try" doc:id="03fddd98-c0a5-4313-97f4-0fa44c151bb7" >
+				<s3:create-bucket doc:name="Create bucket" doc:id="e42d1e58-2ae0-4a46-a6d5-b9ab210a6fe3" config-ref="Amazon_S3_Configuration" bucketName="hello"/>
+				<error-handler >
+					<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="7511e935-7979-4454-bed9-5cba29881ead" type="ANY" when='error.cause.message contains "Error"'>
+						<db:insert doc:name="Insert" doc:id="e99aaa47-1fb5-4080-83de-952d0371247a" config-ref="Database_Config">
+							<db:sql ><![CDATA[INSERT INTO audit(accno, corelationid, errortext)
+VALUES (:accno, :corelationid, :errortext)]]></db:sql>
+							<db:input-parameters ><![CDATA[#[{
+        accno: vars.accno,
+        corelationid:correlationId,
+        errortext: error.description}]]]></db:input-parameters>
+						</db:insert>
+					</on-error-propagate>
+				</error-handler>
+			</try>
+		</async>
+	</flow>
+</mule>
